@@ -1,0 +1,767 @@
+{
+  "info": {
+    "_postman_id": "6b1f8a52-3c1e-4c55-9a43-2f1d7e0b9c11",
+    "name": "Relay API v1",
+    "description": "Relay API v1 by Didavie. Set the apiKey variable (start with a sandbox key from https://relaysandbox.didavie.com) and baseUrl (sandbox: https://relaysandbox.didavie.com/api/v1, production: https://relaypartner.didavie.com/api/v1). Reference: https://github.com/didavie/relay-api",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{apiKey}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "https://relaysandbox.didavie.com/api/v1"
+    },
+    {
+      "key": "apiKey",
+      "value": "rb_sbx_xxxxxxxxxxxx"
+    },
+    {
+      "key": "trackingCode",
+      "value": "SB042917"
+    },
+    {
+      "key": "quoteId",
+      "value": ""
+    },
+    {
+      "key": "driverId",
+      "value": ""
+    }
+  ],
+  "item": [
+    {
+      "name": "Shop keys (rb_)",
+      "item": [
+        {
+          "name": "Who am I",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "me"
+              ]
+            },
+            "description": "Key type, mode (live or test) and the shop behind the key."
+          }
+        },
+        {
+          "name": "Estimate by address",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/pricing/estimate?delivery_address=Haie Vive, Cotonou",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "pricing",
+                "estimate"
+              ],
+              "query": [
+                {
+                  "key": "delivery_address",
+                  "value": "Haie Vive, Cotonou"
+                }
+              ]
+            },
+            "description": "Delivery price for the customer's address. Returns a quote_id valid about 15 minutes."
+          }
+        },
+        {
+          "name": "Estimate by GPS point",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/pricing/estimate?delivery_lat=6.3654&delivery_lng=2.4183&weight_kg=1",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "pricing",
+                "estimate"
+              ],
+              "query": [
+                {
+                  "key": "delivery_lat",
+                  "value": "6.3654"
+                },
+                {
+                  "key": "delivery_lng",
+                  "value": "2.4183"
+                },
+                {
+                  "key": "weight_kg",
+                  "value": "1"
+                }
+              ]
+            },
+            "description": "Delivery price for a GPS point. Without a pickup point, the shop's saved pickup point is used."
+          }
+        },
+        {
+          "name": "Create a delivery",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/packages",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "packages"
+              ]
+            },
+            "description": "Same platform_order_id returns the same delivery (idempotent). Use the quote_id of the estimate to keep its price. Set \"test\": true to validate without creating.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"platform_order_id\": \"WC-1001\",\n  \"quote_id\": \"{{quoteId}}\",\n  \"client_name\": \"Awa Dossou\",\n  \"client_phone\": \"+2290197000002\",\n  \"client_address\": \"Haie Vive, rue 12.045, Cotonou\",\n  \"delivery_latitude\": 6.3654,\n  \"delivery_longitude\": 2.4183,\n  \"description\": \"2 t-shirts\",\n  \"weight_kg\": 1,\n  \"value_fcfa\": 15000\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "List deliveries",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/packages?limit=20&offset=0",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "packages"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "20"
+                },
+                {
+                  "key": "offset",
+                  "value": "0"
+                }
+              ]
+            },
+            "description": "Newest first. updated_since returns only the deliveries changed after that time, with server_time for the next call."
+          }
+        },
+        {
+          "name": "Get a delivery",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/packages/{{trackingCode}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "packages",
+                "{{trackingCode}}"
+              ]
+            },
+            "description": "Full delivery, with tracking_url."
+          }
+        },
+        {
+          "name": "Light status",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/packages/{{trackingCode}}/status",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "packages",
+                "{{trackingCode}}",
+                "status"
+              ]
+            },
+            "description": "Status and main dates, for polling."
+          }
+        },
+        {
+          "name": "Edit a delivery",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/packages/{{trackingCode}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "packages",
+                "{{trackingCode}}"
+              ]
+            },
+            "description": "Send only the fields to change. Allowed until pickup.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"special_instructions\": \"Call on arrival at the blue gate\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Cancel a delivery",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/packages/{{trackingCode}}/cancel",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "packages",
+                "{{trackingCode}}",
+                "cancel"
+              ]
+            },
+            "description": "Free until pickup.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"Order cancelled by the customer\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Agency keys (relay_pk_)",
+      "item": [
+        {
+          "name": "Agency and credits",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "me"
+              ]
+            },
+            "description": "Agency, credit balance and scopes of the key."
+          }
+        },
+        {
+          "name": "Delivery zones",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/zones",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "zones"
+              ]
+            },
+            "description": "Active delivery zones (zones:read)."
+          }
+        },
+        {
+          "name": "Credit price",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/pricing",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "pricing"
+              ]
+            },
+            "description": "Credit unit price (pricing:read)."
+          }
+        },
+        {
+          "name": "Estimate a route",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/pricing/estimate?pickup_lat=6.3703&pickup_lng=2.3912&delivery_lat=6.3654&delivery_lng=2.4183&weight_kg=2.5&assignment_mode=own_fleet",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "pricing",
+                "estimate"
+              ],
+              "query": [
+                {
+                  "key": "pickup_lat",
+                  "value": "6.3703"
+                },
+                {
+                  "key": "pickup_lng",
+                  "value": "2.3912"
+                },
+                {
+                  "key": "delivery_lat",
+                  "value": "6.3654"
+                },
+                {
+                  "key": "delivery_lng",
+                  "value": "2.4183"
+                },
+                {
+                  "key": "weight_kg",
+                  "value": "2.5"
+                },
+                {
+                  "key": "assignment_mode",
+                  "value": "own_fleet"
+                }
+              ]
+            },
+            "description": "Pickup and delivery points are required for agency keys."
+          }
+        },
+        {
+          "name": "Create a package",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "ORD-1001"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/packages",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "packages"
+              ]
+            },
+            "description": "Idempotency-Key and external_order_id make retries safe.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"external_order_id\": \"ORD-1001\",\n  \"client_name\": \"Jean Dupont\",\n  \"client_phone\": \"+22991234567\",\n  \"client_address\": \"Rue des Fleurs, Cotonou\",\n  \"delivery_address\": \"Marché Dantokpa, Cotonou\",\n  \"pickup_latitude\": 6.3703,\n  \"pickup_longitude\": 2.3912,\n  \"delivery_latitude\": 6.3654,\n  \"delivery_longitude\": 2.4183,\n  \"weight_kg\": 2.5,\n  \"assignment_mode\": \"own_fleet\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "List packages",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/packages?limit=50&offset=0",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "packages"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "50"
+                },
+                {
+                  "key": "offset",
+                  "value": "0"
+                }
+              ]
+            },
+            "description": "Packages of the agency, with paging."
+          }
+        },
+        {
+          "name": "Get a package",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/packages/{{trackingCode}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "packages",
+                "{{trackingCode}}"
+              ]
+            },
+            "description": "Package by tracking code."
+          }
+        },
+        {
+          "name": "Light status",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/packages/{{trackingCode}}/status",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "packages",
+                "{{trackingCode}}",
+                "status"
+              ]
+            },
+            "description": "Status and main dates, for polling."
+          }
+        },
+        {
+          "name": "List drivers",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/drivers?active=true",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "drivers"
+              ],
+              "query": [
+                {
+                  "key": "active",
+                  "value": "true"
+                }
+              ]
+            },
+            "description": "Agency drivers. Use driver_id to assign."
+          }
+        },
+        {
+          "name": "Assign a driver",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/packages/{{trackingCode}}/assign",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "packages",
+                "{{trackingCode}}",
+                "assign"
+              ]
+            },
+            "description": "Assign a pre-pickup package to one of your drivers. 1 credit, charged once per package.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"driver_id\": \"{{driverId}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Cancel a package",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/packages/{{trackingCode}}/cancel",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "packages",
+                "{{trackingCode}}",
+                "cancel"
+              ]
+            },
+            "description": "Cancel before pickup.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"cancellation_reason\": \"Customer cancelled\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Sandbox only",
+      "item": [
+        {
+          "name": "Force a status",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/sandbox/packages/{{trackingCode}}/simulate",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "sandbox",
+                "packages",
+                "{{trackingCode}}",
+                "simulate"
+              ]
+            },
+            "description": "Sandbox only. Moves the delivery forward and sends the matching webhook.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"delivered\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Pause auto-advance",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/sandbox/packages/{{trackingCode}}/simulate",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "sandbox",
+                "packages",
+                "{{trackingCode}}",
+                "simulate"
+              ]
+            },
+            "description": "Sandbox only. false pauses the automatic steps, true resumes them.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"auto_advance\": false\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Send a test webhook",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/sandbox/webhook/test",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "sandbox",
+                "webhook",
+                "test"
+              ]
+            },
+            "description": "Sandbox only. Sends webhook.test to the URL saved for this key."
+          }
+        }
+      ]
+    }
+  ]
+}

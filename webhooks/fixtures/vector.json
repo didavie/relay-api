@@ -1,0 +1,7 @@
+{
+  "_comment": "Test vector for the verifiers. The secret is a placeholder, never a real one.",
+  "secret": "whsec_example_secret_do_not_use",
+  "timestamp": 1760440800,
+  "body": "{\"id\":\"evt_8f14e45fceea167a5a36dedd4bea2543\",\"event\":\"package.delivered\",\"created_at\":\"2026-10-14T11:20:00Z\",\"data\":{\"package_id\":\"3f6c1d2e-8a4b-4c7d-9e1f-0a2b3c4d5e6f\",\"tracking_code\":\"RB042917\",\"platform_order_id\":\"WC-1001\",\"status\":\"delivered\",\"previous_status\":\"in_transit\",\"delivered_at\":\"2026-10-14T11:20:00Z\"}}",
+  "signature_header": "t=1760440800,v1=5433557e83516f26b79fcb86f7de455514fbde4229fe27f4f9d649badfce8852"
+}
