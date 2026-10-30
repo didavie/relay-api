@@ -1,0 +1,8 @@
+extends:
+  - recommended
+
+rules:
+  # The API answers with a shared error envelope documented once in components.
+  operation-4xx-response: warn
+  # Server URLs are the real public hosts.
+  no-server-example.com: error

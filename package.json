@@ -1,0 +1,21 @@
+{
+  "name": "relay-api-docs",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Relay API v1 reference, examples and webhook verifiers.",
+  "license": "MIT",
+  "homepage": "https://github.com/didavie/relay-api#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/didavie/relay-api.git"
+  },
+  "scripts": {
+    "lint": "redocly lint openapi/openapi.json && node scripts/check-json.mjs",
+    "test": "node --test webhooks/node/verify.test.mjs",
+    "test:php": "php webhooks/php/test.php",
+    "test:python": "cd webhooks/python && python3 -m unittest -v"
+  },
+  "devDependencies": {
+    "@redocly/cli": "2.62.1"
+  }
+}

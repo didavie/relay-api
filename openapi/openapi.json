@@ -1,0 +1,2804 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Relay Partner API",
+    "version": "1.0.0",
+    "description": "REST API for Relay Partner agencies. Authenticate with a live key (`relay_pk_live_…`) or a test key (`relay_pk_test_…`). Test keys reach the Relay test environment; API sandbox keys (rb_sbx_, relay_pk_sbx_) work only on the sandbox server. Rate limits: 120 requests/minute per API key and 300/minute per client IP; over the limit you get 429 with a Retry-After header. Webhooks are documented here for payload shape only — configure the URL on the Developer page.\n\n**Shop keys (E-commerce, \"Connecter mon site\")**: an approved Relay shop owner creates `rb_live_<48 hex>` (production) or `rb_test_<48 hex>` (test environment) keys on Partners → Connecter mon site (shown once, stored hashed, max 3 active, revocable). Same headers and envelope. Shop keys may call GET /me, GET /pricing/estimate, GET/POST /packages, GET/PATCH /packages/{tracking_code}, GET /packages/{tracking_code}/status and PATCH /packages/{tracking_code}/cancel; agency-only routes answer 403 SHOP_KEY_NOT_ALLOWED. Sending through the API is free (you pay the normal delivery price, minimum fee applies). Caps: 60 estimates/min per key; 20 packages/day for new shops (first 30 days or until 20 delivered) then 200/day (DAILY_LIMIT, Retry-After 3600); 30 packages waiting for a driver at once (PENDING_LIMIT). Shop webhooks: see `x-webhooks.shopPackage`.",
+    "contact": {
+      "email": "relay@didavie.com"
+    },
+    "license": {
+      "name": "MIT",
+      "url": "https://github.com/didavie/relay-api/blob/main/LICENSE"
+    }
+  },
+  "servers": [
+    {
+      "url": "https://relaypartner.didavie.com/api/v1",
+      "description": "Production (live and test keys)"
+    },
+    {
+      "url": "https://relaysandbox.didavie.com/api/v1",
+      "description": "API sandbox (rb_sbx_ and relay_pk_sbx_ keys)"
+    }
+  ],
+  "tags": [
+    {
+      "name": "Agency",
+      "description": "Who the key belongs to."
+    },
+    {
+      "name": "Packages",
+      "description": "Create, list, track, assign, cancel."
+    },
+    {
+      "name": "Drivers",
+      "description": "Agency fleet (own_fleet assign)."
+    },
+    {
+      "name": "Zones",
+      "description": "Active delivery zones."
+    },
+    {
+      "name": "Pricing",
+      "description": "Credit price and route fee estimate."
+    },
+    {
+      "name": "Shop (E-commerce)",
+      "description": "Routes open to shop keys (rb_live_ / rb_test_): estimate + quote, create with platform_order_id, track, edit until pickup, cancel."
+    }
+  ],
+  "security": [
+    {
+      "bearerAuth": []
+    },
+    {
+      "apiKey": []
+    }
+  ],
+  "paths": {
+    "/me": {
+      "get": {
+        "operationId": "getMe",
+        "tags": [
+          "Agency"
+        ],
+        "summary": "Agency and credit balance (or shop for shop keys)",
+        "description": "Returns the agency bound to this API key. No scope required — every valid key can call this. With a shop key (`rb_live_…` / `rb_test_…`) the data is a `ShopMe` object instead.",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "success",
+                    "data"
+                  ],
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    },
+                    "data": {
+                      "anyOf": [
+                        {
+                          "$ref": "#/components/schemas/Me"
+                        },
+                        {
+                          "$ref": "#/components/schemas/ShopMe"
+                        }
+                      ]
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "example": {
+                  "success": true,
+                  "data": {
+                    "id": "0f9e8d7c-6b5a-4c3d-8e2f-1a0b9c8d7e6f",
+                    "agency_name": "Agence Express Cotonou",
+                    "agency_code": "AEC-001",
+                    "credits_balance": 42,
+                    "verification_status": "verified",
+                    "scopes": [
+                      "packages:read",
+                      "packages:write",
+                      "tracking:read"
+                    ]
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, malformed, expired, or revoked API key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                },
+                "example": {
+                  "success": false,
+                  "error": "API key required. Provide it in Authorization: Bearer <key> or X-API-Key header.",
+                  "code": "UNAUTHORIZED"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded (120 requests/minute per API key, 300/minute per client IP). Wait for the Retry-After header (seconds).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                },
+                "example": {
+                  "success": false,
+                  "error": "Rate limit exceeded: 120 requests per minute per API key. Retry after 42s.",
+                  "code": "RATE_LIMIT_EXCEEDED"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/packages": {
+      "get": {
+        "operationId": "listPackages",
+        "tags": [
+          "Packages"
+        ],
+        "summary": "List packages",
+        "description": "Shop keys (`rb_live_…` / `rb_test_…`) may call this route. With a shop key, `packages` holds ShopPackage objects (newest first).",
+        "security": [
+          {
+            "bearerAuth": [
+              "packages:read"
+            ]
+          },
+          {
+            "apiKey": [
+              "packages:read"
+            ]
+          }
+        ],
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Filter by package status (pending, registered, driver_assigned, picked_up, in_transit, delivered, cancelled, …)."
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "default": 50,
+              "maximum": 100
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "default": 0
+            }
+          },
+          {
+            "name": "updated_since",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "description": "Shop keys only. Only packages updated after this time, newest update first; the answer adds server_time to send as the next updated_since (polling tools such as Zapier or Make)."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "success",
+                    "data"
+                  ],
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/PackageList"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "example": {
+                  "success": true,
+                  "data": {
+                    "packages": [],
+                    "total": 0,
+                    "limit": 50,
+                    "offset": 0
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, malformed, expired, or revoked API key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                },
+                "example": {
+                  "success": false,
+                  "error": "API key required. Provide it in Authorization: Bearer <key> or X-API-Key header.",
+                  "code": "UNAUTHORIZED"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Key lacks packages:read, or the agency is not verified.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                },
+                "example": {
+                  "success": false,
+                  "error": "This API key does not have the required scope: packages:read",
+                  "code": "INSUFFICIENT_SCOPE"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded (120 requests/minute per API key, 300/minute per client IP). Wait for the Retry-After header (seconds).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                },
+                "example": {
+                  "success": false,
+                  "error": "Rate limit exceeded: 120 requests per minute per API key. Retry after 42s.",
+                  "code": "RATE_LIMIT_EXCEEDED"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "createPackage",
+        "tags": [
+          "Packages"
+        ],
+        "summary": "Create a package",
+        "description": "Create a package for this agency. `own_fleet` does not require GPS. `platform_open` and `hybrid` require pickup and delivery coordinates; the server persists the grid fee (GET /pricing/estimate first). Send `Idempotency-Key` and/or `external_order_id` to make creates safe to retry.\n\n**Credits**: where the agency's country charges at creation, the package's credits (1 on fixed pricing, or the per-km estimate) are taken when it is created and the later driver assignment is free; not enough credits → 402 `INSUFFICIENT_CREDITS` and nothing is created. Cancelling within 15 minutes of creation (window set per country) and before pickup refunds that charge in full; after that it is kept.\n\n**Shop keys**: send a `ShopCreatePackage` body. `platform_order_id` is required and idempotent (same id again → same package, `idempotent: true`, HTTP 200). Pass the `quote_id` from GET /pricing/estimate to keep the quoted price (same shop, not expired, unused, same points within 200 m). `\"test\": true` validates and prices without creating anything (HTTP 200). 201 when created.",
+        "security": [
+          {
+            "bearerAuth": [
+              "packages:write"
+            ]
+          },
+          {
+            "apiKey": [
+              "packages:write"
+            ]
+          }
+        ],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 128
+            },
+            "description": "Key chosen by the client. Retrying with the same key returns the original package instead of creating a second one."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/CreatePackage"
+                  },
+                  {
+                    "$ref": "#/components/schemas/ShopCreatePackage"
+                  }
+                ]
+              },
+              "examples": {
+                "shopCheckout": {
+                  "summary": "Shop key: create with the checkout quote",
+                  "value": {
+                    "platform_order_id": "WC-1001",
+                    "quote_id": "c1d2e3f4-a5b6-4c7d-8e9f-0a1b2c3d4e5f",
+                    "client_name": "Awa Dossou",
+                    "client_phone": "+2290197000002",
+                    "client_address": "Haie Vive, rue 12.045, Cotonou",
+                    "delivery_latitude": 6.3654,
+                    "delivery_longitude": 2.4183,
+                    "pickup_address": "Boutique, Ganhi, Cotonou",
+                    "pickup_latitude": 6.3703,
+                    "pickup_longitude": 2.3912,
+                    "description": "2 t-shirts",
+                    "weight_kg": 1,
+                    "value_fcfa": 15000,
+                    "delivery_type": "standard"
+                  }
+                },
+                "ownFleet": {
+                  "summary": "Own fleet",
+                  "value": {
+                    "client_name": "Jean Dupont",
+                    "client_phone": "+22991234567",
+                    "client_address": "Rue des Fleurs, Cotonou",
+                    "delivery_address": "Marché Dantokpa, Cotonou",
+                    "description": "Colis fragile",
+                    "weight_kg": 2.5,
+                    "value_fcfa": 15000,
+                    "is_fragile": true,
+                    "assignment_mode": "own_fleet"
+                  }
+                },
+                "platformOpen": {
+                  "summary": "Platform drivers",
+                  "value": {
+                    "client_name": "Jean Dupont",
+                    "client_phone": "+22991234567",
+                    "client_address": "Rue des Fleurs, Cotonou",
+                    "delivery_address": "Marché Dantokpa, Cotonou",
+                    "pickup_latitude": 6.365,
+                    "pickup_longitude": 2.418,
+                    "delivery_latitude": 6.38,
+                    "delivery_longitude": 2.435,
+                    "weight_kg": 2.5,
+                    "assignment_mode": "platform_open"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "success",
+                    "data"
+                  ],
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    },
+                    "data": {
+                      "type": "object",
+                      "additionalProperties": true
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "example": {
+                  "success": true,
+                  "data": {
+                    "tracking_code": "RB042917",
+                    "status": "pending"
+                  }
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "success",
+                    "data"
+                  ],
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    },
+                    "data": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "additionalProperties": true
+                        },
+                        {
+                          "$ref": "#/components/schemas/ShopPackage"
+                        }
+                      ]
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "example": {
+                  "success": true,
+                  "data": {
+                    "tracking_code": "RB042917",
+                    "status": "pending"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation, pricing, or credits.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                },
+                "example": {
+                  "success": false,
+                  "error": "Unable to compute delivery fee for this route. Use GET /api/v1/pricing/estimate first.",
+                  "code": "PRICING_UNAVAILABLE"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, malformed, expired, or revoked API key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                },
+                "example": {
+                  "success": false,
+                  "error": "API key required. Provide it in Authorization: Bearer <key> or X-API-Key header.",
+                  "code": "UNAUTHORIZED"
+                }
+              }
+            }
+          },
+          "402": {
+            "description": "Agency subscription or credits required. Charge at creation: code INSUFFICIENT_CREDITS (details.credits_required, details.credits_balance).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                },
+                "example": {
+                  "success": false,
+                  "error": "An active plan or credits are required.",
+                  "code": "AGENCY_SUBSCRIPTION_REQUIRED"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Key lacks packages:write, or the agency is not verified.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                },
+                "example": {
+                  "success": false,
+                  "error": "This API key does not have the required scope: packages:write",
+                  "code": "INSUFFICIENT_SCOPE"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Agency: Idempotency-Key and external_order_id point at different packages. Shop keys: QUOTE_EXPIRED, QUOTE_USED or QUOTE_MISMATCH.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                },
+                "example": {
+                  "success": false,
+                  "error": "external_order_id and Idempotency-Key refer to different existing packages.",
+                  "code": "IDEMPOTENCY_CONFLICT"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Shop keys: no delivery price for this route.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                },
+                "example": {
+                  "success": false,
+                  "error": "No delivery price is available for this route.",
+                  "code": "PRICING_UNAVAILABLE"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "RATE_LIMIT_EXCEEDED (120 requests/minute per key, 300/minute per IP; Retry-After header). Shop keys also: DAILY_LIMIT (details.limit; 20/day for new shops, then 200/day; Retry-After 3600) and PENDING_LIMIT (30 packages waiting for a driver).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                },
+                "example": {
+                  "success": false,
+                  "error": "Daily limit reached: 20 packages per day for this shop. Try again tomorrow or contact Relay.",
+                  "code": "DAILY_LIMIT",
+                  "details": {
+                    "limit": 20
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/packages/{tracking_code}": {
+      "get": {
+        "operationId": "getPackage",
+        "tags": [
+          "Packages"
+        ],
+        "summary": "Get package by tracking code",
+        "description": "Shop keys (`rb_live_…` / `rb_test_…`) may call this route. With a shop key, the path also accepts the package_id (UUID) and the data is a ShopPackage.",
+        "security": [
+          {
+            "bearerAuth": [
+              "tracking:read"
+            ]
+          },
+          {
+            "apiKey": [
+              "tracking:read"
+            ]
+          }
+        ],
+        "parameters": [
+          {
+            "name": "tracking_code",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "example": "RB042917"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "success",
+                    "data"
+                  ],
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    },
+                    "data": {
+                      "type": "object",
+                      "additionalProperties": true
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "example": {
+                  "success": true,
+                  "data": {
+                    "tracking_code": "RB042917",
+                    "status": "in_transit"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, malformed, expired, or revoked API key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                },
+                "example": {
+                  "success": false,
+                  "error": "API key required. Provide it in Authorization: Bearer <key> or X-API-Key header.",
+                  "code": "UNAUTHORIZED"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Key lacks tracking:read, or the agency is not verified.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                },
+                "example": {
+                  "success": false,
+                  "error": "This API key does not have the required scope: tracking:read",
+                  "code": "INSUFFICIENT_SCOPE"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Unknown tracking code for this agency.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                },
+                "example": {
+                  "success": false,
+                  "error": "Package not found or not accessible with this API key.",
+                  "code": "NOT_FOUND"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded (120 requests/minute per API key, 300/minute per client IP). Wait for the Retry-After header (seconds).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                },
+                "example": {
+                  "success": false,
+                  "error": "Rate limit exceeded: 120 requests per minute per API key. Retry after 42s.",
+                  "code": "RATE_LIMIT_EXCEEDED"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "operationId": "updateShopPackage",
+        "tags": [
+          "Shop (E-commerce)"
+        ],
+        "summary": "Edit a package (shop keys only)",
+        "description": "Shop keys only. Send only the fields to change. Allowed until pickup; after pickup → 409 CANNOT_EDIT. `delivery_fee_fcfa` can only raise the price. If a driver is already assigned he is notified.",
+        "parameters": [
+          {
+            "name": "tracking_code",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "example": "RB042917"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ShopUpdatePackage"
+              },
+              "example": {
+                "client_phone": "+2290197000003",
+                "special_instructions": "Appeler en arrivant au portail bleu"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "success",
+                    "data"
+                  ],
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/ShopPackage"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "example": {
+                  "success": true,
+                  "data": {
+                    "package_id": "3f6c1d2e-8a4b-4c7d-9e1f-0a2b3c4d5e6f",
+                    "tracking_code": "RB042917",
+                    "platform_order_id": "WC-1001",
+                    "status": "registered",
+                    "code_retrait": "4821",
+                    "code_livraison": "7390",
+                    "qr_code_retrait": "RELAY_BENIN|RETRAIT|3f6c1d2e-…|4821|1760430000000",
+                    "qr_code_livraison": "RELAY_BENIN|LIVRAISON|3f6c1d2e-…|7390|1760430000000",
+                    "pickup_address": "Boutique, Ganhi, Cotonou",
+                    "pickup_latitude": 6.3703,
+                    "pickup_longitude": 2.3912,
+                    "client_name": "Awa Dossou",
+                    "client_phone": "+2290197000003",
+                    "delivery_address": "Haie Vive, rue 12.045, Cotonou",
+                    "delivery_latitude": 6.3654,
+                    "delivery_longitude": 2.4183,
+                    "delivery_fee_fcfa": 1000,
+                    "currency": "XOF",
+                    "package_source": "platform_ecommerce",
+                    "is_platform_package": true,
+                    "vendor_id": "9b8a7c6d-5e4f-4a3b-2c1d-0e9f8a7b6c5d",
+                    "assigned_driver_name": null,
+                    "created_at": "2026-10-14T10:00:00Z",
+                    "updated_at": "2026-10-14T10:00:00Z",
+                    "picked_up_at": null,
+                    "delivered_at": null,
+                    "cancelled_at": null,
+                    "price_type": "fixed",
+                    "quote_id": "c1d2e3f4-a5b6-4c7d-8e9f-0a1b2c3d4e5f",
+                    "delivery_payer": "merchant",
+                    "idempotent": false,
+                    "test": false
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "VALIDATION_ERROR, INVALID_PHONE or INVALID_BODY.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                },
+                "example": {
+                  "success": false,
+                  "error": "Request body must be a JSON object.",
+                  "code": "INVALID_BODY"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, malformed, expired, or revoked API key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                },
+                "example": {
+                  "success": false,
+                  "error": "API key required. Provide it in Authorization: Bearer <key> or X-API-Key header.",
+                  "code": "UNAUTHORIZED"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Agency key on a shop-only route, or the shop is paused / not approved.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                },
+                "example": {
+                  "success": false,
+                  "error": "API access for this shop is paused. Contact Relay support.",
+                  "code": "SHOP_PAUSED"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Unknown package for this shop.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                },
+                "example": {
+                  "success": false,
+                  "error": "Package not found or not accessible with this API key.",
+                  "code": "NOT_FOUND"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Already picked up.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                },
+                "example": {
+                  "success": false,
+                  "error": "This package can no longer be changed (status picked_up).",
+                  "code": "CANNOT_EDIT",
+                  "details": {
+                    "status": "picked_up"
+                  }
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded (120 requests/minute per API key, 300/minute per client IP). Wait for the Retry-After header (seconds).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                },
+                "example": {
+                  "success": false,
+                  "error": "Rate limit exceeded: 120 requests per minute per API key. Retry after 42s.",
+                  "code": "RATE_LIMIT_EXCEEDED"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/packages/{tracking_code}/status": {
+      "get": {
+        "operationId": "getPackageStatus",
+        "tags": [
+          "Packages"
+        ],
+        "summary": "Lightweight status (polling)",
+        "description": "Shop keys (`rb_live_…` / `rb_test_…`) may call this route. Shop keys get { tracking_code, platform_order_id, status, updated_at, picked_up_at, delivered_at, cancelled_at }.",
+        "security": [
+          {
+            "bearerAuth": [
+              "tracking:read"
+            ]
+          },
+          {
+            "apiKey": [
+              "tracking:read"
+            ]
+          }
+        ],
+        "parameters": [
+          {
+            "name": "tracking_code",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "success",
+                    "data"
+                  ],
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/PackageStatus"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "example": {
+                  "success": true,
+                  "data": {
+                    "tracking_code": "RB042917",
+                    "status": "delivered",
+                    "created_at": "2026-09-25T12:00:00Z",
+                    "updated_at": "2026-09-25T13:10:00Z",
+                    "delivered_at": "2026-09-25T13:10:00Z",
+                    "cancelled_at": null,
+                    "cancellation_reason": null
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, malformed, expired, or revoked API key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                },
+                "example": {
+                  "success": false,
+                  "error": "API key required. Provide it in Authorization: Bearer <key> or X-API-Key header.",
+                  "code": "UNAUTHORIZED"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Unknown tracking code for this agency.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                },
+                "example": {
+                  "success": false,
+                  "error": "Package not found or not accessible with this API key.",
+                  "code": "NOT_FOUND"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded (120 requests/minute per API key, 300/minute per client IP). Wait for the Retry-After header (seconds).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                },
+                "example": {
+                  "success": false,
+                  "error": "Rate limit exceeded: 120 requests per minute per API key. Retry after 42s.",
+                  "code": "RATE_LIMIT_EXCEEDED"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/packages/{tracking_code}/cancel": {
+      "patch": {
+        "operationId": "cancelPackage",
+        "tags": [
+          "Packages"
+        ],
+        "summary": "Cancel a package",
+        "description": "Shop keys (`rb_live_…` / `rb_test_…`) may call this route. Shop keys: body { \"reason\": \"...\" } (optional), before pickup only (409 CANNOT_CANCEL after); the data is the cancelled ShopPackage. Agency packages charged at creation: full refund when cancelled within the refund window (15 min by default, per country) and before pickup (`credit_refunded: true`); after that the credit is kept.",
+        "security": [
+          {
+            "bearerAuth": [
+              "packages:write"
+            ]
+          },
+          {
+            "apiKey": [
+              "packages:write"
+            ]
+          }
+        ],
+        "parameters": [
+          {
+            "name": "tracking_code",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "cancellation_reason": {
+                    "type": "string",
+                    "default": "Cancelled via API"
+                  },
+                  "reason": {
+                    "type": "string",
+                    "description": "Shop keys: optional cancellation reason."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "success",
+                    "data"
+                  ],
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    },
+                    "data": {
+                      "type": "object",
+                      "additionalProperties": true
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "example": {
+                  "success": true,
+                  "data": {
+                    "tracking_code": "RB042917",
+                    "status": "cancelled",
+                    "credit_refunded": false
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, malformed, expired, or revoked API key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                },
+                "example": {
+                  "success": false,
+                  "error": "API key required. Provide it in Authorization: Bearer <key> or X-API-Key header.",
+                  "code": "UNAUTHORIZED"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Unknown tracking code for this agency.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                },
+                "example": {
+                  "success": false,
+                  "error": "Package not found or not accessible with this API key.",
+                  "code": "NOT_FOUND"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Cannot cancel in the current status (shop keys: CANNOT_CANCEL after pickup).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                },
+                "example": {
+                  "success": false,
+                  "error": "Cannot cancel package in current status.",
+                  "code": "INVALID_STATUS"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded (120 requests/minute per API key, 300/minute per client IP). Wait for the Retry-After header (seconds).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                },
+                "example": {
+                  "success": false,
+                  "error": "Rate limit exceeded: 120 requests per minute per API key. Retry after 42s.",
+                  "code": "RATE_LIMIT_EXCEEDED"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/packages/{tracking_code}/assign": {
+      "post": {
+        "operationId": "assignPackage",
+        "tags": [
+          "Packages"
+        ],
+        "summary": "Assign to an agency driver",
+        "x-shop-keys": "403 SHOP_KEY_NOT_ALLOWED",
+        "description": "Assigns a pre-pickup package to one of your drivers. Deducts 1 credit (idempotent: re-assigning the same package does not charge again). `driver_id` is the user UUID from GET /drivers.",
+        "security": [
+          {
+            "bearerAuth": [
+              "packages:write"
+            ]
+          },
+          {
+            "apiKey": [
+              "packages:write"
+            ]
+          }
+        ],
+        "parameters": [
+          {
+            "name": "tracking_code",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "driver_id"
+                ],
+                "properties": {
+                  "driver_id": {
+                    "type": "string",
+                    "format": "uuid",
+                    "description": "User UUID of the driver (GET /drivers)."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "success",
+                    "data"
+                  ],
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    },
+                    "data": {
+                      "type": "object",
+                      "additionalProperties": true
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "example": {
+                  "success": true,
+                  "data": {
+                    "already_charged": false,
+                    "credits_remaining": 41
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, malformed, expired, or revoked API key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                },
+                "example": {
+                  "success": false,
+                  "error": "API key required. Provide it in Authorization: Bearer <key> or X-API-Key header.",
+                  "code": "UNAUTHORIZED"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Unknown tracking code for this agency.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                },
+                "example": {
+                  "success": false,
+                  "error": "Package not found or not accessible with this API key.",
+                  "code": "NOT_FOUND"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Package is not in a pre-pickup status.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                },
+                "example": {
+                  "success": false,
+                  "error": "Package cannot be assigned in status \"delivered\".",
+                  "code": "INVALID_STATUS"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded (120 requests/minute per API key, 300/minute per client IP). Wait for the Retry-After header (seconds).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                },
+                "example": {
+                  "success": false,
+                  "error": "Rate limit exceeded: 120 requests per minute per API key. Retry after 42s.",
+                  "code": "RATE_LIMIT_EXCEEDED"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/drivers": {
+      "get": {
+        "operationId": "listDrivers",
+        "tags": [
+          "Drivers"
+        ],
+        "summary": "List agency drivers",
+        "x-shop-keys": "403 SHOP_KEY_NOT_ALLOWED",
+        "security": [
+          {
+            "bearerAuth": [
+              "packages:write"
+            ]
+          },
+          {
+            "apiKey": [
+              "packages:write"
+            ]
+          }
+        ],
+        "parameters": [
+          {
+            "name": "active",
+            "in": "query",
+            "schema": {
+              "type": "boolean"
+            },
+            "description": "Filter by relationship_status (true = active)."
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Filter by name, phone, or driver_code."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "success",
+                    "data"
+                  ],
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    },
+                    "data": {
+                      "type": "object",
+                      "additionalProperties": true
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "example": {
+                  "success": true,
+                  "data": {
+                    "drivers": []
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, malformed, expired, or revoked API key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                },
+                "example": {
+                  "success": false,
+                  "error": "API key required. Provide it in Authorization: Bearer <key> or X-API-Key header.",
+                  "code": "UNAUTHORIZED"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Key lacks packages:write, or the agency is not verified.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                },
+                "example": {
+                  "success": false,
+                  "error": "This API key does not have the required scope: packages:write",
+                  "code": "INSUFFICIENT_SCOPE"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded (120 requests/minute per API key, 300/minute per client IP). Wait for the Retry-After header (seconds).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                },
+                "example": {
+                  "success": false,
+                  "error": "Rate limit exceeded: 120 requests per minute per API key. Retry after 42s.",
+                  "code": "RATE_LIMIT_EXCEEDED"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/zones": {
+      "get": {
+        "operationId": "listZones",
+        "tags": [
+          "Zones"
+        ],
+        "summary": "List active delivery zones",
+        "x-shop-keys": "403 SHOP_KEY_NOT_ALLOWED",
+        "security": [
+          {
+            "bearerAuth": [
+              "zones:read"
+            ]
+          },
+          {
+            "apiKey": [
+              "zones:read"
+            ]
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "success",
+                    "data"
+                  ],
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    },
+                    "data": {
+                      "type": "object",
+                      "additionalProperties": true
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "example": {
+                  "success": true,
+                  "data": {
+                    "zones": []
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, malformed, expired, or revoked API key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                },
+                "example": {
+                  "success": false,
+                  "error": "API key required. Provide it in Authorization: Bearer <key> or X-API-Key header.",
+                  "code": "UNAUTHORIZED"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Key lacks zones:read, or the agency is not verified.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                },
+                "example": {
+                  "success": false,
+                  "error": "This API key does not have the required scope: zones:read",
+                  "code": "INSUFFICIENT_SCOPE"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded (120 requests/minute per API key, 300/minute per client IP). Wait for the Retry-After header (seconds).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                },
+                "example": {
+                  "success": false,
+                  "error": "Rate limit exceeded: 120 requests per minute per API key. Retry after 42s.",
+                  "code": "RATE_LIMIT_EXCEEDED"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/pricing": {
+      "get": {
+        "operationId": "getCreditPricing",
+        "tags": [
+          "Pricing"
+        ],
+        "summary": "Credit unit price",
+        "x-shop-keys": "403 SHOP_KEY_NOT_ALLOWED",
+        "security": [
+          {
+            "bearerAuth": [
+              "pricing:read"
+            ]
+          },
+          {
+            "apiKey": [
+              "pricing:read"
+            ]
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "success",
+                    "data"
+                  ],
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/CreditPricing"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "example": {
+                  "success": true,
+                  "data": {
+                    "currency": "XOF",
+                    "price_per_credit_fcfa": 500,
+                    "discount_percentage": 0,
+                    "minimum_purchase": 1,
+                    "note": "1 credit = 1 driver assignment."
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, malformed, expired, or revoked API key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                },
+                "example": {
+                  "success": false,
+                  "error": "API key required. Provide it in Authorization: Bearer <key> or X-API-Key header.",
+                  "code": "UNAUTHORIZED"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Key lacks pricing:read, or the agency is not verified.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                },
+                "example": {
+                  "success": false,
+                  "error": "This API key does not have the required scope: pricing:read",
+                  "code": "INSUFFICIENT_SCOPE"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded (120 requests/minute per API key, 300/minute per client IP). Wait for the Retry-After header (seconds).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                },
+                "example": {
+                  "success": false,
+                  "error": "Rate limit exceeded: 120 requests per minute per API key. Retry after 42s.",
+                  "code": "RATE_LIMIT_EXCEEDED"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/pricing/estimate": {
+      "get": {
+        "operationId": "estimateDeliveryFee",
+        "tags": [
+          "Pricing"
+        ],
+        "summary": "Estimate delivery fee for a route",
+        "description": "Evaluates the agency pricing grid from pickup and delivery coordinates (always required). Optional `distance_km` only replaces the measured distance used for the platform minimum when assignment_mode is platform_open or hybrid.\n\n**Shop keys**: returns a `ShopEstimate` with a `quote_id` (≈15 min) to pass to POST /packages. Same price as the Relay app for that trip (grid + time pricing + campaign discount), never under the minimum fee. Pickup defaults to the shop's saved pickup point. No delivery GPS → `price_type: \"from\"` (lowest possible price; the final price is fixed at create). 60 estimates/min per key.",
+        "security": [
+          {
+            "bearerAuth": [
+              "pricing:read"
+            ]
+          },
+          {
+            "apiKey": [
+              "pricing:read"
+            ]
+          }
+        ],
+        "parameters": [
+          {
+            "name": "pickup_lat",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "number"
+            },
+            "description": "Agency keys: required. Shop keys: optional (default: the shop's saved pickup point)."
+          },
+          {
+            "name": "pickup_lng",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "number"
+            },
+            "description": "Agency keys: required. Shop keys: optional (default: the shop's saved pickup point)."
+          },
+          {
+            "name": "delivery_lat",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "number"
+            },
+            "description": "Agency keys: required. Shop keys: optional (without it price_type is \"from\")."
+          },
+          {
+            "name": "delivery_lng",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "number"
+            },
+            "description": "Agency keys: required. Shop keys: optional (without it price_type is \"from\")."
+          },
+          {
+            "name": "delivery_address",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Shop keys only, when delivery_lat/lng are not sent: the customer's address text. Relay finds the point (in the shop's country, near the pickup) and prices it; the answer adds geocoded (true/false) and geocoded_address. Nothing found: the \"from\" price as without coordinates."
+          },
+          {
+            "name": "distance_km",
+            "in": "query",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "weight_kg",
+            "in": "query",
+            "schema": {
+              "type": "number",
+              "default": 1
+            }
+          },
+          {
+            "name": "assignment_mode",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "own_fleet",
+                "platform_open",
+                "hybrid"
+              ],
+              "default": "platform_open"
+            }
+          },
+          {
+            "name": "priority_level",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "default": "medium"
+            }
+          },
+          {
+            "name": "is_fragile",
+            "in": "query",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "is_cod",
+            "in": "query",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "delivery_type",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "standard"
+              ],
+              "default": "standard"
+            },
+            "description": "Shop keys only. Express is not available yet: 'express' is accepted and answered as standard with delivery_type_note."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "success",
+                    "data"
+                  ],
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    },
+                    "data": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "additionalProperties": true
+                        },
+                        {
+                          "$ref": "#/components/schemas/ShopEstimate"
+                        }
+                      ]
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "example": {
+                  "success": true,
+                  "data": {
+                    "distance_km": 2.1,
+                    "min_delivery_fee_fcfa": 900,
+                    "credit_cost_estimate": 2,
+                    "currency": "XOF"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Coordinates missing or not numeric.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                },
+                "example": {
+                  "success": false,
+                  "error": "pickup_lat, pickup_lng, delivery_lat and delivery_lng are required.",
+                  "code": "VALIDATION_ERROR"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, malformed, expired, or revoked API key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                },
+                "example": {
+                  "success": false,
+                  "error": "API key required. Provide it in Authorization: Bearer <key> or X-API-Key header.",
+                  "code": "UNAUTHORIZED"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Shop keys: no delivery price for this route.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                },
+                "example": {
+                  "success": false,
+                  "error": "No delivery price is available for this route.",
+                  "code": "PRICING_UNAVAILABLE"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded (120 requests/minute per API key, 300/minute per client IP). Wait for the Retry-After header (seconds).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                },
+                "example": {
+                  "success": false,
+                  "error": "Rate limit exceeded: 120 requests per minute per API key. Retry after 42s.",
+                  "code": "RATE_LIMIT_EXCEEDED"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "Authorization: Bearer relay_pk_live_… or relay_pk_test_… (agency), rb_live_… or rb_test_… (shop)"
+      },
+      "apiKey": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "X-API-Key",
+        "description": "Same keys as bearerAuth (relay_pk_… or rb_…)."
+      }
+    },
+    "schemas": {
+      "ErrorEnvelope": {
+        "type": "object",
+        "required": [
+          "success",
+          "error"
+        ],
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "enum": [
+              false
+            ]
+          },
+          "error": {
+            "type": "string"
+          },
+          "code": {
+            "type": "string",
+            "description": "Stable code for programmatic handling (UNAUTHORIZED, VALIDATION_ERROR, PRICING_UNAVAILABLE, NOT_FOUND, …). Shop keys: INVALID_API_KEY, INVALID_KEY_FORMAT (401); SHOP_NOT_APPROVED, SHOP_INACTIVE, SHOP_PAUSED, SHOP_KEY_NOT_ALLOWED (403); VALIDATION_ERROR, INVALID_PHONE, INVALID_BODY, QUOTE_INVALID, ROUTE_COUNTRY_UNKNOWN and other country-gate codes (400); NOT_FOUND (404); QUOTE_EXPIRED, QUOTE_USED, QUOTE_MISMATCH, CANNOT_EDIT, CANNOT_CANCEL (409); PRICING_UNAVAILABLE (422); DAILY_LIMIT, PENDING_LIMIT, RATE_LIMIT_EXCEEDED (429); INTERNAL_ERROR (500); API_DISABLED (503)."
+          },
+          "details": {}
+        }
+      },
+      "Me": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "agency_name": {
+            "type": "string"
+          },
+          "agency_code": {
+            "type": "string"
+          },
+          "credits_balance": {
+            "type": "integer"
+          },
+          "verification_status": {
+            "type": "string"
+          },
+          "scopes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "PackageList": {
+        "type": "object",
+        "properties": {
+          "packages": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "total": {
+            "type": "integer"
+          },
+          "limit": {
+            "type": "integer"
+          },
+          "offset": {
+            "type": "integer"
+          }
+        }
+      },
+      "PackageStatus": {
+        "type": "object",
+        "properties": {
+          "tracking_code": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "delivered_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "cancelled_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "cancellation_reason": {
+            "type": "string",
+            "nullable": true
+          }
+        }
+      },
+      "CreditPricing": {
+        "type": "object",
+        "properties": {
+          "currency": {
+            "type": "string",
+            "example": "XOF"
+          },
+          "price_per_credit_fcfa": {
+            "type": "number"
+          },
+          "discount_percentage": {
+            "type": "number"
+          },
+          "minimum_purchase": {
+            "type": "integer"
+          },
+          "note": {
+            "type": "string"
+          }
+        }
+      },
+      "CreatePackage": {
+        "type": "object",
+        "required": [
+          "client_name",
+          "client_phone",
+          "client_address",
+          "delivery_address"
+        ],
+        "properties": {
+          "client_name": {
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 255
+          },
+          "client_phone": {
+            "type": "string"
+          },
+          "client_address": {
+            "type": "string",
+            "minLength": 10
+          },
+          "delivery_address": {
+            "type": "string",
+            "minLength": 10
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 500,
+            "nullable": true
+          },
+          "assignment_mode": {
+            "type": "string",
+            "enum": [
+              "own_fleet",
+              "platform_open",
+              "hybrid"
+            ],
+            "default": "own_fleet"
+          },
+          "pickup_latitude": {
+            "type": "number"
+          },
+          "pickup_longitude": {
+            "type": "number"
+          },
+          "delivery_latitude": {
+            "type": "number"
+          },
+          "delivery_longitude": {
+            "type": "number"
+          },
+          "pickup_address": {
+            "type": "string"
+          },
+          "weight_kg": {
+            "type": "number",
+            "minimum": 0,
+            "exclusiveMinimum": true
+          },
+          "value_fcfa": {
+            "type": "number",
+            "minimum": 0
+          },
+          "delivery_fee_fcfa": {
+            "type": "number",
+            "minimum": 0
+          },
+          "is_fragile": {
+            "type": "boolean"
+          },
+          "requires_signature": {
+            "type": "boolean"
+          },
+          "require_pickup_qr": {
+            "type": "boolean"
+          },
+          "require_delivery_qr": {
+            "type": "boolean"
+          },
+          "special_instructions": {
+            "type": "string",
+            "nullable": true
+          },
+          "priority_level": {
+            "type": "string"
+          },
+          "package_type": {
+            "type": "string"
+          },
+          "delivery_type": {
+            "type": "string",
+            "enum": [
+              "standard",
+              "express",
+              "scheduled"
+            ]
+          },
+          "is_cod": {
+            "type": "boolean"
+          },
+          "payment_method": {
+            "type": "string"
+          },
+          "external_order_id": {
+            "type": "string",
+            "maxLength": 128
+          },
+          "idempotency_key": {
+            "type": "string",
+            "maxLength": 128
+          },
+          "client_email": {
+            "type": "string",
+            "format": "email"
+          },
+          "vendor_name": {
+            "type": "string"
+          },
+          "vendor_phone": {
+            "type": "string"
+          }
+        }
+      },
+      "ShopMe": {
+        "type": "object",
+        "properties": {
+          "key_type": {
+            "type": "string",
+            "enum": [
+              "shop"
+            ]
+          },
+          "key_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "live",
+              "test"
+            ]
+          },
+          "shop": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "name": {
+                "type": "string"
+              },
+              "shop_code": {
+                "type": "string"
+              },
+              "country": {
+                "type": "string",
+                "example": "BJ"
+              }
+            }
+          },
+          "scopes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "ShopEstimate": {
+        "type": "object",
+        "properties": {
+          "quote_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "About 15 minutes after the estimate."
+          },
+          "price_fcfa": {
+            "type": "integer"
+          },
+          "price_type": {
+            "type": "string",
+            "enum": [
+              "fixed",
+              "from"
+            ],
+            "description": "`from` when no delivery GPS was sent: lowest possible price, the final price is fixed at create."
+          },
+          "currency": {
+            "type": "string",
+            "example": "XOF"
+          },
+          "distance_km": {
+            "type": "number",
+            "nullable": true
+          },
+          "eta_minutes": {
+            "type": "integer",
+            "nullable": true,
+            "description": "Rough: 15 + 3 min/km."
+          },
+          "discount": {
+            "type": "object",
+            "properties": {
+              "applied": {
+                "type": "boolean"
+              },
+              "min_percent": {
+                "type": "integer",
+                "nullable": true
+              },
+              "price_before_discount_fcfa": {
+                "type": "integer",
+                "nullable": true
+              }
+            }
+          },
+          "time_pricing_applied": {
+            "type": "boolean"
+          },
+          "pickup_latitude": {
+            "type": "number",
+            "nullable": true
+          },
+          "pickup_longitude": {
+            "type": "number",
+            "nullable": true
+          },
+          "delivery_latitude": {
+            "type": "number",
+            "nullable": true
+          },
+          "delivery_longitude": {
+            "type": "number",
+            "nullable": true
+          },
+          "weight_kg": {
+            "type": "number"
+          },
+          "delivery_type": {
+            "type": "string",
+            "enum": [
+              "standard"
+            ]
+          },
+          "delivery_type_note": {
+            "type": "string",
+            "description": "Present when express was asked."
+          },
+          "geocoded": {
+            "type": "boolean",
+            "description": "Present when delivery_address was sent: true when a point was found."
+          },
+          "geocoded_address": {
+            "type": "string",
+            "description": "Present when delivery_address was sent: the place found."
+          }
+        },
+        "example": {
+          "quote_id": "c1d2e3f4-a5b6-4c7d-8e9f-0a1b2c3d4e5f",
+          "expires_at": "2026-10-14T10:15:00Z",
+          "price_fcfa": 1000,
+          "price_type": "fixed",
+          "currency": "XOF",
+          "distance_km": 3.4,
+          "eta_minutes": 26,
+          "discount": {
+            "applied": false,
+            "min_percent": null,
+            "price_before_discount_fcfa": 1000
+          },
+          "time_pricing_applied": false,
+          "pickup_latitude": 6.3703,
+          "pickup_longitude": 2.3912,
+          "delivery_latitude": 6.3654,
+          "delivery_longitude": 2.4183,
+          "weight_kg": 1,
+          "delivery_type": "standard"
+        }
+      },
+      "ShopCreatePackage": {
+        "type": "object",
+        "description": "POST /packages body for shop keys.",
+        "required": [
+          "platform_order_id",
+          "client_name",
+          "client_phone",
+          "client_address"
+        ],
+        "properties": {
+          "platform_order_id": {
+            "type": "string",
+            "maxLength": 100,
+            "description": "Your order id. Idempotent: the same id returns the same package (idempotent: true, HTTP 200)."
+          },
+          "client_name": {
+            "type": "string"
+          },
+          "client_phone": {
+            "type": "string",
+            "description": "International (+229…) or local (01…); validated."
+          },
+          "client_address": {
+            "type": "string"
+          },
+          "delivery_latitude": {
+            "type": "number",
+            "description": "Send both delivery coordinates or neither."
+          },
+          "delivery_longitude": {
+            "type": "number"
+          },
+          "pickup_address": {
+            "type": "string",
+            "description": "Default: the shop's saved pickup point."
+          },
+          "pickup_latitude": {
+            "type": "number"
+          },
+          "pickup_longitude": {
+            "type": "number"
+          },
+          "vendor_phone": {
+            "type": "string",
+            "description": "Default: the saved contact phone."
+          },
+          "vendor_name": {
+            "type": "string",
+            "description": "Default: the shop name."
+          },
+          "client_email": {
+            "type": "string",
+            "format": "email"
+          },
+          "package_type": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "weight_kg": {
+            "type": "number",
+            "maximum": 30,
+            "description": "Default: saved weight."
+          },
+          "value_fcfa": {
+            "type": "number",
+            "minimum": 0
+          },
+          "delivery_type": {
+            "type": "string",
+            "enum": [
+              "standard"
+            ],
+            "description": "Express is not available yet: 'express' is accepted and answered as standard with delivery_type_note."
+          },
+          "delivery_payer": {
+            "type": "string",
+            "enum": [
+              "merchant",
+              "recipient"
+            ],
+            "description": "recipient = the customer pays the driver on delivery. Default: saved setting."
+          },
+          "delivery_fee_fcfa": {
+            "type": "number",
+            "description": "Can only raise the computed price, never lower it."
+          },
+          "quote_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "From GET /pricing/estimate. Honoured if same shop, not expired, unused, and same pickup/delivery points within 200 m."
+          },
+          "is_fragile": {
+            "type": "boolean",
+            "default": false
+          },
+          "requires_signature": {
+            "type": "boolean",
+            "default": true
+          },
+          "special_instructions": {
+            "type": "string"
+          },
+          "metadata": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "test": {
+            "type": "boolean",
+            "default": false,
+            "description": "true = full validation + price, nothing created, no driver, not counted."
+          }
+        }
+      },
+      "ShopUpdatePackage": {
+        "type": "object",
+        "description": "PATCH /packages/{tracking_code} body (shop keys). Every field optional; allowed until pickup.",
+        "properties": {
+          "client_name": {
+            "type": "string"
+          },
+          "client_phone": {
+            "type": "string"
+          },
+          "client_email": {
+            "type": "string",
+            "format": "email"
+          },
+          "client_address": {
+            "type": "string"
+          },
+          "delivery_latitude": {
+            "type": "number"
+          },
+          "delivery_longitude": {
+            "type": "number"
+          },
+          "pickup_address": {
+            "type": "string"
+          },
+          "pickup_latitude": {
+            "type": "number"
+          },
+          "pickup_longitude": {
+            "type": "number"
+          },
+          "description": {
+            "type": "string"
+          },
+          "weight_kg": {
+            "type": "number",
+            "maximum": 30
+          },
+          "value_fcfa": {
+            "type": "number",
+            "minimum": 0
+          },
+          "is_fragile": {
+            "type": "boolean"
+          },
+          "requires_signature": {
+            "type": "boolean"
+          },
+          "special_instructions": {
+            "type": "string"
+          },
+          "delivery_fee_fcfa": {
+            "type": "number",
+            "description": "Raise only."
+          },
+          "metadata": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        }
+      },
+      "ShopPackage": {
+        "type": "object",
+        "description": "Package object returned to shop keys.",
+        "properties": {
+          "package_id": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "tracking_code": {
+            "type": "string"
+          },
+          "tracking_url": {
+            "type": "string",
+            "format": "uri",
+            "description": "POST /packages and GET /packages/{tracking} only: public tracking page the customer can open (no login). Absent in test mode and in lists."
+          },
+          "platform_order_id": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "code_retrait": {
+            "type": "string",
+            "description": "Pickup code (give it to the driver at pickup)."
+          },
+          "code_livraison": {
+            "type": "string",
+            "description": "Delivery code (the customer gives it to the driver)."
+          },
+          "qr_code_retrait": {
+            "type": "string"
+          },
+          "qr_code_livraison": {
+            "type": "string"
+          },
+          "pickup_address": {
+            "type": "string",
+            "nullable": true
+          },
+          "pickup_latitude": {
+            "type": "number",
+            "nullable": true
+          },
+          "pickup_longitude": {
+            "type": "number",
+            "nullable": true
+          },
+          "client_name": {
+            "type": "string"
+          },
+          "client_phone": {
+            "type": "string"
+          },
+          "delivery_address": {
+            "type": "string"
+          },
+          "delivery_latitude": {
+            "type": "number",
+            "nullable": true
+          },
+          "delivery_longitude": {
+            "type": "number",
+            "nullable": true
+          },
+          "delivery_fee_fcfa": {
+            "type": "number"
+          },
+          "currency": {
+            "type": "string",
+            "example": "XOF"
+          },
+          "package_source": {
+            "type": "string"
+          },
+          "is_platform_package": {
+            "type": "boolean"
+          },
+          "vendor_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "assigned_driver_name": {
+            "type": "string",
+            "nullable": true
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "picked_up_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "delivered_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "cancelled_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "price_type": {
+            "type": "string",
+            "enum": [
+              "fixed",
+              "from"
+            ]
+          },
+          "quote_id": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "delivery_payer": {
+            "type": "string",
+            "enum": [
+              "merchant",
+              "recipient"
+            ]
+          },
+          "idempotent": {
+            "type": "boolean"
+          },
+          "test": {
+            "type": "boolean"
+          }
+        },
+        "example": {
+          "package_id": "3f6c1d2e-8a4b-4c7d-9e1f-0a2b3c4d5e6f",
+          "tracking_code": "RB042917",
+          "platform_order_id": "WC-1001",
+          "status": "registered",
+          "code_retrait": "4821",
+          "code_livraison": "7390",
+          "qr_code_retrait": "RELAY_BENIN|RETRAIT|3f6c1d2e-…|4821|1760430000000",
+          "qr_code_livraison": "RELAY_BENIN|LIVRAISON|3f6c1d2e-…|7390|1760430000000",
+          "pickup_address": "Boutique, Ganhi, Cotonou",
+          "pickup_latitude": 6.3703,
+          "pickup_longitude": 2.3912,
+          "client_name": "Awa Dossou",
+          "client_phone": "+2290197000002",
+          "delivery_address": "Haie Vive, rue 12.045, Cotonou",
+          "delivery_latitude": 6.3654,
+          "delivery_longitude": 2.4183,
+          "delivery_fee_fcfa": 1000,
+          "currency": "XOF",
+          "package_source": "platform_ecommerce",
+          "is_platform_package": true,
+          "vendor_id": "9b8a7c6d-5e4f-4a3b-2c1d-0e9f8a7b6c5d",
+          "assigned_driver_name": null,
+          "created_at": "2026-10-14T10:00:00Z",
+          "updated_at": "2026-10-14T10:00:00Z",
+          "picked_up_at": null,
+          "delivered_at": null,
+          "cancelled_at": null,
+          "price_type": "fixed",
+          "quote_id": "c1d2e3f4-a5b6-4c7d-8e9f-0a1b2c3d4e5f",
+          "delivery_payer": "merchant",
+          "idempotent": false,
+          "test": false
+        }
+      },
+      "ShopWebhookEvent": {
+        "type": "object",
+        "description": "POST body Relay sends to a shop's webhook URL. Headers: X-Relay-Signature: t=<unix>,v1=<hex HMAC-SHA256 of \"<t>.<raw body>\" with the whsec_ secret>, X-Relay-Event, User-Agent: Relay-Webhook/1.0.",
+        "properties": {
+          "id": {
+            "type": "string",
+            "example": "evt_8f14e45fceea167a5a36dedd4bea2543",
+            "description": "Unique per event: dedupe on it."
+          },
+          "event": {
+            "type": "string",
+            "enum": [
+              "package.picked_up",
+              "package.delivered",
+              "package.cancelled",
+              "package.failed",
+              "webhook.test"
+            ]
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "data": {
+            "type": "object",
+            "additionalProperties": true,
+            "description": "ShopPackage without code_retrait / code_livraison / QR codes, plus previous_status."
+          }
+        }
+      },
+      "WebhookEvent": {
+        "type": "object",
+        "description": "POST body Relay sends to your webhook URL. Not an HTTP path on this API.",
+        "properties": {
+          "event": {
+            "type": "string",
+            "enum": [
+              "package.created",
+              "package.assigned",
+              "package.picked_up",
+              "package.delivered",
+              "package.cancelled",
+              "package.issue_reported"
+            ]
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "package": {
+            "type": "object",
+            "additionalProperties": true,
+            "description": "The package row at the time of the event (id, tracking_code, status, client and address fields, fees, timestamps, ...)."
+          },
+          "agency_id": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      }
+    }
+  },
+  "x-webhooks": {
+    "shopPackage": {
+      "post": {
+        "summary": "Shop package events (shop keys)",
+        "description": "Set an https URL and generate a signing secret (whsec_…, shown once) on Partners → Connecter mon site. Verify: HMAC-SHA256 over `${t}.${rawBody}`, constant-time compare with v1, reject if |now − t| > 300 s, dedupe on `id`. Answer 2xx within 5 s; redirects are not followed; retries after 30 s, 5 min, 30 min (4 attempts).",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ShopWebhookEvent"
+              },
+              "example": {
+                "id": "evt_8f14e45fceea167a5a36dedd4bea2543",
+                "event": "package.delivered",
+                "created_at": "2026-10-14T11:20:00Z",
+                "data": {
+                  "package_id": "3f6c1d2e-8a4b-4c7d-9e1f-0a2b3c4d5e6f",
+                  "tracking_code": "RB042917",
+                  "platform_order_id": "WC-1001",
+                  "status": "delivered",
+                  "previous_status": "in_transit",
+                  "delivered_at": "2026-10-14T11:20:00Z"
+                }
+              }
+            }
+          }
+        },
+        "operationId": "shopPackageEvent",
+        "responses": {
+          "200": {
+            "description": "Any 2xx answer acknowledges the event."
+          }
+        }
+      }
+    },
+    "package": {
+      "post": {
+        "summary": "Outgoing package events",
+        "description": "Relay POSTs a signed JSON body to the URL you configure. Header: X-Relay-Signature: t=<unix>,v1=<hex>. Signed message is `{t}.{rawBody}`. HMAC-SHA256 with your signing secret. Reject if |now − t| > 300s.",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WebhookEvent"
+              },
+              "example": {
+                "event": "package.delivered",
+                "timestamp": "2026-03-14T12:30:00Z",
+                "package": {
+                  "id": "3f6c1d2e-8a4b-4c7d-9e1f-0a2b3c4d5e6f",
+                  "tracking_code": "RB042917",
+                  "status": "delivered",
+                  "delivered_at": "2026-03-14T12:30:00Z"
+                },
+                "agency_id": "0f9e8d7c-6b5a-4c3d-8e2f-1a0b9c8d7e6f"
+              }
+            }
+          }
+        },
+        "operationId": "agencyPackageEvent",
+        "responses": {
+          "200": {
+            "description": "Any 2xx answer acknowledges the event."
+          }
+        }
+      }
+    }
+  },
+  "externalDocs": {
+    "description": "Guides and examples",
+    "url": "https://github.com/didavie/relay-api"
+  }
+}
