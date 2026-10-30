@@ -4,10 +4,10 @@
 #
 #   RELAY_API_KEY=relay_pk_sbx_xxxxxxxxxxxx ./agency.sh
 #
-# Sandbox keys (relay_pk_sbx_) use the sandbox; live and test keys use production.
+# Sandbox keys (relay_pk_sbx_) use the sandbox; live keys (relay_pk_live_) use production.
 set -euo pipefail
 
-: "${RELAY_API_KEY:?Set RELAY_API_KEY to an agency key (relay_pk_sbx_, relay_pk_test_ or relay_pk_live_)}"
+: "${RELAY_API_KEY:?Set RELAY_API_KEY to an agency key (relay_pk_sbx_ or relay_pk_live_)}"
 case "$RELAY_API_KEY" in
   relay_pk_sbx_*) BASE="${RELAY_API_BASE:-https://relaysandbox.didavie.com/api/v1}" ;;
   relay_pk_*) BASE="${RELAY_API_BASE:-https://relaypartner.didavie.com/api/v1}" ;;

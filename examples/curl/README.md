@@ -4,8 +4,8 @@ Two runnable walkthroughs. Both need `curl` and `jq`, and pick the base URL from
 
 | Script | Key | What it does |
 | --- | --- | --- |
-| [`shop.sh`](shop.sh) | Shop (`rb_sbx_`, `rb_test_`, `rb_live_`) | `/me`, estimate by address, create with the quote, read, status, edit, list with `updated_since`, cancel |
-| [`agency.sh`](agency.sh) | Agency (`relay_pk_sbx_`, `relay_pk_test_`, `relay_pk_live_`) | `/me`, zones, credit price, estimate, create with `Idempotency-Key`, assign a driver, status, cancel |
+| [`shop.sh`](shop.sh) | Shop (`rb_sbx_`, `rb_live_`) | `/me`, estimate by address, create with the quote, read, status, edit, list with `updated_since`, cancel |
+| [`agency.sh`](agency.sh) | Agency (`relay_pk_sbx_`, `relay_pk_live_`) | `/me`, zones, credit price, estimate, create with `Idempotency-Key`, assign a driver, status, cancel |
 
 ```bash
 RELAY_API_KEY=rb_sbx_xxxxxxxxxxxx ./shop.sh

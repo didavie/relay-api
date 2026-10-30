@@ -3,7 +3,7 @@
   "info": {
     "title": "Relay Partner API",
     "version": "1.0.0",
-    "description": "REST API for Relay Partner agencies. Authenticate with a live key (`relay_pk_live_…`) or a test key (`relay_pk_test_…`). Test keys reach the Relay test environment; API sandbox keys (rb_sbx_, relay_pk_sbx_) work only on the sandbox server. Rate limits: 120 requests/minute per API key and 300/minute per client IP; over the limit you get 429 with a Retry-After header. Webhooks are documented here for payload shape only — configure the URL on the Developer page.\n\n**Shop keys (E-commerce, \"Connecter mon site\")**: an approved Relay shop owner creates `rb_live_<48 hex>` (production) or `rb_test_<48 hex>` (test environment) keys on Partners → Connecter mon site (shown once, stored hashed, max 3 active, revocable). Same headers and envelope. Shop keys may call GET /me, GET /pricing/estimate, GET/POST /packages, GET/PATCH /packages/{tracking_code}, GET /packages/{tracking_code}/status and PATCH /packages/{tracking_code}/cancel; agency-only routes answer 403 SHOP_KEY_NOT_ALLOWED. Sending through the API is free (you pay the normal delivery price, minimum fee applies). Caps: 60 estimates/min per key; 20 packages/day for new shops (first 30 days or until 20 delivered) then 200/day (DAILY_LIMIT, Retry-After 3600); 30 packages waiting for a driver at once (PENDING_LIMIT). Shop webhooks: see `x-webhooks.shopPackage`.",
+    "description": "REST API for Relay Partner agencies. Authenticate with a live key (`relay_pk_live_…`). Use API sandbox keys (rb_sbx_, relay_pk_sbx_) on the sandbox server to test. Rate limits: 120 requests/minute per API key and 300/minute per client IP; over the limit you get 429 with a Retry-After header. Webhooks are documented here for payload shape only — configure the URL on the Developer page.\n\n**Shop keys (E-commerce, \"Connecter mon site\")**: an approved Relay shop owner creates `rb_live_<48 hex>` (production) keys on Partners → Connecter mon site (shown once, stored hashed, max 3 active, revocable). Same headers and envelope. Shop keys may call GET /me, GET /pricing/estimate, GET/POST /packages, GET/PATCH /packages/{tracking_code}, GET /packages/{tracking_code}/status and PATCH /packages/{tracking_code}/cancel; agency-only routes answer 403 SHOP_KEY_NOT_ALLOWED. Sending through the API is free (you pay the normal delivery price, minimum fee applies). Caps: 60 estimates/min per key; 20 packages/day for new shops (first 30 days or until 20 delivered) then 200/day (DAILY_LIMIT, Retry-After 3600); 30 packages waiting for a driver at once (PENDING_LIMIT). Shop webhooks: see `x-webhooks.shopPackage`.",
     "contact": {
       "email": "relay@didavie.com"
     },
@@ -15,7 +15,7 @@
   "servers": [
     {
       "url": "https://relaypartner.didavie.com/api/v1",
-      "description": "Production (live and test keys)"
+      "description": "Production (live keys)"
     },
     {
       "url": "https://relaysandbox.didavie.com/api/v1",
@@ -45,7 +45,7 @@
     },
     {
       "name": "Shop (E-commerce)",
-      "description": "Routes open to shop keys (rb_live_ / rb_test_): estimate + quote, create with platform_order_id, track, edit until pickup, cancel."
+      "description": "Routes open to shop keys (rb_live_): estimate + quote, create with platform_order_id, track, edit until pickup, cancel."
     }
   ],
   "security": [
@@ -64,7 +64,7 @@
           "Agency"
         ],
         "summary": "Agency and credit balance (or shop for shop keys)",
-        "description": "Returns the agency bound to this API key. No scope required — every valid key can call this. With a shop key (`rb_live_…` / `rb_test_…`) the data is a `ShopMe` object instead.",
+        "description": "Returns the agency bound to this API key. No scope required — every valid key can call this. With a shop key (`rb_live_…`) the data is a `ShopMe` object instead.",
         "responses": {
           "200": {
             "description": "OK",
@@ -156,7 +156,7 @@
           "Packages"
         ],
         "summary": "List packages",
-        "description": "Shop keys (`rb_live_…` / `rb_test_…`) may call this route. With a shop key, `packages` holds ShopPackage objects (newest first).",
+        "description": "Shop keys (`rb_live_…`) may call this route. With a shop key, `packages` holds ShopPackage objects (newest first).",
         "security": [
           {
             "bearerAuth": [
@@ -586,7 +586,7 @@
           "Packages"
         ],
         "summary": "Get package by tracking code",
-        "description": "Shop keys (`rb_live_…` / `rb_test_…`) may call this route. With a shop key, the path also accepts the package_id (UUID) and the data is a ShopPackage.",
+        "description": "Shop keys (`rb_live_…`) may call this route. With a shop key, the path also accepts the package_id (UUID) and the data is a ShopPackage.",
         "security": [
           {
             "bearerAuth": [
@@ -910,7 +910,7 @@
           "Packages"
         ],
         "summary": "Lightweight status (polling)",
-        "description": "Shop keys (`rb_live_…` / `rb_test_…`) may call this route. Shop keys get { tracking_code, platform_order_id, status, updated_at, picked_up_at, delivered_at, cancelled_at }.",
+        "description": "Shop keys (`rb_live_…`) may call this route. Shop keys get { tracking_code, platform_order_id, status, updated_at, picked_up_at, delivered_at, cancelled_at }.",
         "security": [
           {
             "bearerAuth": [
@@ -1029,7 +1029,7 @@
           "Packages"
         ],
         "summary": "Cancel a package",
-        "description": "Shop keys (`rb_live_…` / `rb_test_…`) may call this route. Shop keys: body { \"reason\": \"...\" } (optional), before pickup only (409 CANNOT_CANCEL after); the data is the cancelled ShopPackage. Agency packages charged at creation: full refund when cancelled within the refund window (15 min by default, per country) and before pickup (`credit_refunded: true`); after that the credit is kept.",
+        "description": "Shop keys (`rb_live_…`) may call this route. Shop keys: body { \"reason\": \"...\" } (optional), before pickup only (409 CANNOT_CANCEL after); the data is the cancelled ShopPackage. Agency packages charged at creation: full refund when cancelled within the refund window (15 min by default, per country) and before pickup (`credit_refunded: true`); after that the credit is kept.",
         "security": [
           {
             "bearerAuth": [
@@ -1900,7 +1900,7 @@
       "bearerAuth": {
         "type": "http",
         "scheme": "bearer",
-        "description": "Authorization: Bearer relay_pk_live_… or relay_pk_test_… (agency), rb_live_… or rb_test_… (shop)"
+        "description": "Authorization: Bearer relay_pk_live_… (agency) or rb_live_… (shop)"
       },
       "apiKey": {
         "type": "apiKey",

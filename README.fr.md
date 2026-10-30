@@ -38,11 +38,11 @@ Scripts complets : [`examples/curl/shop.sh`](examples/curl/shop.sh) (clé boutiq
 
 | Clé | Pour qui | Préfixe | Où la créer |
 | --- | --- | --- | --- |
-| Boutique | Une boutique approuvée sur Relay | `rb_live_`, `rb_test_` | Relay Partenaires > Boutique > Connecter mon site |
-| Agence | Une agence de livraison | `relay_pk_live_`, `relay_pk_test_` | Tableau de bord agence > Développeurs |
+| Boutique | Une boutique approuvée sur Relay | `rb_live_` | Relay Partenaires > Boutique > Connecter mon site |
+| Agence | Une agence de livraison | `relay_pk_live_` | Tableau de bord agence > Développeurs |
 | Sandbox | Tout le monde, sans compte Relay | `rb_sbx_`, `relay_pk_sbx_` | [relaysandbox.didavie.com](https://relaysandbox.didavie.com) |
 
-Les clés réelles et de test utilisent la même URL de production : le préfixe choisit l'environnement. Les clés sandbox ne marchent que sur la sandbox. Gardez les clés sur votre serveur, jamais dans du code navigateur ou une application mobile.
+Les clés réelles utilisent l'URL de production. Pour tester, utilisez une clé sandbox. Les clés sandbox ne marchent que sur la sandbox. Gardez les clés sur votre serveur, jamais dans du code navigateur ou une application mobile.
 
 ## Contenu du dépôt
 

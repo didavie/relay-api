@@ -5,7 +5,7 @@
 1. In Postman: **Import** > select the file.
 2. Open the collection **Variables** and set:
    - `apiKey`: your key. Start with a sandbox key (`rb_sbx_...`) from [relaysandbox.didavie.com](https://relaysandbox.didavie.com).
-   - `baseUrl`: `https://relaysandbox.didavie.com/api/v1` (default) or `https://relaypartner.didavie.com/api/v1` for live and test keys.
+   - `baseUrl`: `https://relaysandbox.didavie.com/api/v1` (default) or `https://relaypartner.didavie.com/api/v1` for live keys.
    - `trackingCode`, `quoteId`, `driverId`: copy them from earlier answers.
 3. Authentication is set on the collection (`Bearer {{apiKey}}`).
 

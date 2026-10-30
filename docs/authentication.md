@@ -17,9 +17,7 @@ The `Bearer` scheme is case-insensitive. A request without a key gets `401 UNAUT
 | Kind | Prefix | Created by | Where |
 | --- | --- | --- | --- |
 | Shop, live | `rb_live_` + 48 hex characters | The owner of a shop approved on Relay | Relay Partners > Shop > Connect my website |
-| Shop, test | `rb_test_` + 48 hex characters | Same | Same page, on the Relay test environment |
 | Agency, live | `relay_pk_live_` | A delivery agency | Agency dashboard > Developers |
-| Agency, test | `relay_pk_test_` | Same | Same page |
 | Sandbox, shop | `rb_sbx_` + 48 hex characters | Anyone | [relaysandbox.didavie.com](https://relaysandbox.didavie.com) |
 | Sandbox, agency | `relay_pk_sbx_` + 64 hex characters | Anyone | Same |
 
@@ -33,10 +31,9 @@ The `Bearer` scheme is case-insensitive. A request without a key gets `401 UNAUT
 | Key | Base URL | Data |
 | --- | --- | --- |
 | `rb_live_`, `relay_pk_live_` | `https://relaypartner.didavie.com/api/v1` | Real deliveries |
-| `rb_test_`, `relay_pk_test_` | `https://relaypartner.didavie.com/api/v1` | Relay test environment: no real data is touched |
 | `rb_sbx_`, `relay_pk_sbx_` | `https://relaysandbox.didavie.com/api/v1` | Fake deliveries that move on their own |
 
-The production host reads the key prefix and routes test keys to the test environment, so live and test keys share one base URL. Sandbox keys are refused by production (`401 INVALID_KEY_FORMAT`, with a message that points to the sandbox), and the sandbox refuses live and test keys.
+Build and test against the sandbox, then switch to a live key. Sandbox keys are refused by production (`401 INVALID_KEY_FORMAT`, with a message that points to the sandbox), and the sandbox refuses live keys.
 
 Shop keys also have a dry run: send `"test": true` in `POST /packages` to validate the request and compute the price without creating anything.
 
@@ -52,7 +49,7 @@ Shop key:
   "data": {
     "key_type": "shop",
     "key_id": "5a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d",
-    "mode": "test",
+    "mode": "live",
     "shop": { "id": "7c6b5a4d-3e2f-4a1b-9c8d-7e6f5a4b3c2d", "name": "Boutique Awa", "shop_code": "SHP-0042", "country": "BJ" },
     "scopes": ["packages:read", "packages:write", "tracking:read", "pricing:read"]
   }

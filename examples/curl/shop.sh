@@ -4,13 +4,13 @@
 #
 #   RELAY_API_KEY=rb_sbx_xxxxxxxxxxxx ./shop.sh
 #
-# Sandbox keys (rb_sbx_) use the sandbox; live and test keys (rb_live_, rb_test_) use production.
+# Sandbox keys (rb_sbx_) use the sandbox; live keys (rb_live_) use production.
 set -euo pipefail
 
-: "${RELAY_API_KEY:?Set RELAY_API_KEY to a shop key (rb_sbx_, rb_test_ or rb_live_)}"
+: "${RELAY_API_KEY:?Set RELAY_API_KEY to a shop key (rb_sbx_ or rb_live_)}"
 case "$RELAY_API_KEY" in
   rb_sbx_*) BASE="${RELAY_API_BASE:-https://relaysandbox.didavie.com/api/v1}" ;;
-  rb_live_* | rb_test_*) BASE="${RELAY_API_BASE:-https://relaypartner.didavie.com/api/v1}" ;;
+  rb_live_*) BASE="${RELAY_API_BASE:-https://relaypartner.didavie.com/api/v1}" ;;
   *) echo "This script is for shop keys (rb_...)." >&2; exit 1 ;;
 esac
 AUTH="Authorization: Bearer ${RELAY_API_KEY}"

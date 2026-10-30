@@ -68,11 +68,11 @@ The full walkthroughs are in [`examples/curl/shop.sh`](examples/curl/shop.sh) an
 
 | Key | Who | Prefix | Where to create it |
 | --- | --- | --- | --- |
-| Shop | A shop approved on Relay, to connect its website | `rb_live_`, `rb_test_` | Relay Partners > Shop > Connect my website |
-| Agency | A delivery agency on Relay Partners | `relay_pk_live_`, `relay_pk_test_` | Agency dashboard > Developers |
+| Shop | A shop approved on Relay, to connect its website | `rb_live_` | Relay Partners > Shop > Connect my website |
+| Agency | A delivery agency on Relay Partners | `relay_pk_live_` | Agency dashboard > Developers |
 | Sandbox | Anyone, no Relay account | `rb_sbx_`, `relay_pk_sbx_` | [relaysandbox.didavie.com](https://relaysandbox.didavie.com) |
 
-Live and test keys both use the production base URL: the prefix decides the environment. Sandbox keys work only on the sandbox. Keep keys on your server, never in browser or mobile app code. Details: [docs/authentication.md](docs/authentication.md).
+Live keys use the production base URL. To test, use a sandbox key: sandbox keys work only on the sandbox. Keep keys on your server, never in browser or mobile app code. Details: [docs/authentication.md](docs/authentication.md).
 
 ## Endpoints
 
