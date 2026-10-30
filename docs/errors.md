@@ -35,6 +35,7 @@ Every error uses the same envelope. Check `success` first, then branch on `code`
 | --- | --- | --- |
 | 401 | `UNAUTHORIZED` | No key in `Authorization` or `X-API-Key` |
 | 401 | `INVALID_KEY_FORMAT` | Not a Relay key, or a sandbox key sent to production (or the reverse) |
+| 401 | `TEST_KEY_RETIRED` | An old test key (`rb_test_`, `relay_pk_test_`) sent to production: test keys are retired, use a sandbox key |
 | 401 | `INVALID_API_KEY` | Unknown, expired or revoked key |
 | 403 | `INSUFFICIENT_SCOPE` | Agency key without the scope the route needs |
 | 403 | `SHOP_KEY_NOT_ALLOWED` | Agency-only route called with a shop key |

@@ -3,7 +3,7 @@
   "info": {
     "title": "Relay Partner API",
     "version": "1.0.0",
-    "description": "REST API for Relay Partner agencies. Authenticate with a live key (`relay_pk_live_…`). Use API sandbox keys (rb_sbx_, relay_pk_sbx_) on the sandbox server to test. Rate limits: 120 requests/minute per API key and 300/minute per client IP; over the limit you get 429 with a Retry-After header. Webhooks are documented here for payload shape only — configure the URL on the Developer page.\n\n**Shop keys (E-commerce, \"Connecter mon site\")**: an approved Relay shop owner creates `rb_live_<48 hex>` (production) keys on Partners → Connecter mon site (shown once, stored hashed, max 3 active, revocable). Same headers and envelope. Shop keys may call GET /me, GET /pricing/estimate, GET/POST /packages, GET/PATCH /packages/{tracking_code}, GET /packages/{tracking_code}/status and PATCH /packages/{tracking_code}/cancel; agency-only routes answer 403 SHOP_KEY_NOT_ALLOWED. Sending through the API is free (you pay the normal delivery price, minimum fee applies). Caps: 60 estimates/min per key; 20 packages/day for new shops (first 30 days or until 20 delivered) then 200/day (DAILY_LIMIT, Retry-After 3600); 30 packages waiting for a driver at once (PENDING_LIMIT). Shop webhooks: see `x-webhooks.shopPackage`.",
+    "description": "REST API for Relay Partner agencies. Authenticate with a live key (`relay_pk_live_…`). To test, use the API sandbox (https://relaysandbox.didavie.com/api/v1) with a sandbox key (`relay_pk_sbx_…` / `rb_sbx_…`): fake deliveries, same paths and fields. The old test keys (`relay_pk_test_…`, `rb_test_…`) are retired: production answers 401 TEST_KEY_RETIRED. Rate limits: 120 requests/minute per API key and 300/minute per client IP; over the limit you get 429 with a Retry-After header. Webhooks are documented here for payload shape only — configure the URL on the Developer page.\n\n**Shop keys (E-commerce, \"Connecter mon site\")**: an approved Relay shop owner creates `rb_live_<48 hex>` keys on Partners → Connecter mon site (shown once, stored hashed, max 3 active, revocable). Same headers and envelope. Shop keys may call GET /me, GET /pricing/estimate, GET/POST /packages, GET/PATCH /packages/{tracking_code}, GET /packages/{tracking_code}/status and PATCH /packages/{tracking_code}/cancel; agency-only routes answer 403 SHOP_KEY_NOT_ALLOWED. Sending through the API is free (you pay the normal delivery price, minimum fee applies). Caps: 60 estimates/min per key; 20 packages/day for new shops (first 30 days or until 20 delivered) then 200/day (DAILY_LIMIT, Retry-After 3600); 30 packages waiting for a driver at once (PENDING_LIMIT). Shop webhooks: see `x-webhooks.shopPackage`.",
     "contact": {
       "email": "relay@didavie.com"
     },
@@ -1900,7 +1900,7 @@
       "bearerAuth": {
         "type": "http",
         "scheme": "bearer",
-        "description": "Authorization: Bearer relay_pk_live_… (agency) or rb_live_… (shop)"
+        "description": "Authorization: Bearer relay_pk_live_… (agency) or rb_live_… (shop). API sandbox keys (relay_pk_sbx_…, rb_sbx_…) work only on https://relaysandbox.didavie.com/api/v1."
       },
       "apiKey": {
         "type": "apiKey",
@@ -1928,7 +1928,7 @@
           },
           "code": {
             "type": "string",
-            "description": "Stable code for programmatic handling (UNAUTHORIZED, VALIDATION_ERROR, PRICING_UNAVAILABLE, NOT_FOUND, …). Shop keys: INVALID_API_KEY, INVALID_KEY_FORMAT (401); SHOP_NOT_APPROVED, SHOP_INACTIVE, SHOP_PAUSED, SHOP_KEY_NOT_ALLOWED (403); VALIDATION_ERROR, INVALID_PHONE, INVALID_BODY, QUOTE_INVALID, ROUTE_COUNTRY_UNKNOWN and other country-gate codes (400); NOT_FOUND (404); QUOTE_EXPIRED, QUOTE_USED, QUOTE_MISMATCH, CANNOT_EDIT, CANNOT_CANCEL (409); PRICING_UNAVAILABLE (422); DAILY_LIMIT, PENDING_LIMIT, RATE_LIMIT_EXCEEDED (429); INTERNAL_ERROR (500); API_DISABLED (503)."
+            "description": "Stable code for programmatic handling (UNAUTHORIZED, VALIDATION_ERROR, PRICING_UNAVAILABLE, NOT_FOUND, …). Shop keys: INVALID_API_KEY, INVALID_KEY_FORMAT, TEST_KEY_RETIRED (401); SHOP_NOT_APPROVED, SHOP_INACTIVE, SHOP_PAUSED, SHOP_KEY_NOT_ALLOWED (403); VALIDATION_ERROR, INVALID_PHONE, INVALID_BODY, QUOTE_INVALID, ROUTE_COUNTRY_UNKNOWN and other country-gate codes (400); NOT_FOUND (404); QUOTE_EXPIRED, QUOTE_USED, QUOTE_MISMATCH, CANNOT_EDIT, CANNOT_CANCEL (409); PRICING_UNAVAILABLE (422); DAILY_LIMIT, PENDING_LIMIT, RATE_LIMIT_EXCEEDED (429); INTERNAL_ERROR (500); API_DISABLED (503)."
           },
           "details": {}
         }
