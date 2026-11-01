@@ -3,7 +3,7 @@
   "info": {
     "title": "Relay Partner API",
     "version": "1.0.0",
-    "description": "REST API for Relay Partner agencies. Authenticate with a live key (`relay_pk_live_…`). To test, use the API sandbox (https://relaysandbox.didavie.com/api/v1) with a sandbox key (`relay_pk_sbx_…` / `rb_sbx_…`): fake deliveries, same paths and fields. The old test keys (`relay_pk_test_…`, `rb_test_…`) are retired: production answers 401 TEST_KEY_RETIRED. Rate limits: 120 requests/minute per API key and 300/minute per client IP; over the limit you get 429 with a Retry-After header. Webhooks are documented here for payload shape only — configure the URL on the Developer page.\n\n**Shop keys (E-commerce, \"Connecter mon site\")**: an approved Relay shop owner creates `rb_live_<48 hex>` keys on Partners → Connecter mon site (shown once, stored hashed, max 3 active, revocable). Same headers and envelope. Shop keys may call GET /me, GET /pricing/estimate, GET/POST /packages, GET/PATCH /packages/{tracking_code}, GET /packages/{tracking_code}/status and PATCH /packages/{tracking_code}/cancel; agency-only routes answer 403 SHOP_KEY_NOT_ALLOWED. Sending through the API is free (you pay the normal delivery price, minimum fee applies). Caps: 60 estimates/min per key; 20 packages/day for new shops (first 30 days or until 20 delivered) then 200/day (DAILY_LIMIT, Retry-After 3600); 30 packages waiting for a driver at once (PENDING_LIMIT). Shop webhooks: see `x-webhooks.shopPackage`.",
+    "description": "REST API for Relay Partner agencies. Authenticate with a live key (`relay_pk_live_…`). To test, use the API sandbox (https://relaysandbox.didavie.com/api/v1) with a sandbox key (`relay_pk_sbx_…` / `rb_sbx_…`): fake deliveries, same paths and fields. The old test keys (`relay_pk_test_…`, `rb_test_…`) are retired: production answers 401 TEST_KEY_RETIRED. Rate limits: 120 requests/minute per API key and 300/minute per client IP; over the limit you get 429 with a Retry-After header. Webhooks are documented here for payload shape only: configure the URL on the Developer page.\n\n**Shop keys (E-commerce, \"Connecter mon site\")**: an approved Relay shop owner creates `rb_live_<48 hex>` keys on Partners → Connecter mon site (shown once, stored hashed, max 3 active, revocable). Same headers and envelope. Shop keys may call GET /me, GET /pricing/estimate, GET/POST /packages, GET/PATCH /packages/{tracking_code}, GET /packages/{tracking_code}/status and PATCH /packages/{tracking_code}/cancel; agency-only routes answer 403 SHOP_KEY_NOT_ALLOWED. Sending through the API is free (you pay the normal delivery price, minimum fee applies). Caps: 60 estimates/min per key; 20 packages/day for new shops (first 30 days or until 20 delivered) then 200/day (DAILY_LIMIT, Retry-After 3600); 30 packages waiting for a driver at once (PENDING_LIMIT). Shop webhooks: see `x-webhooks.shopPackage`.",
     "contact": {
       "email": "relay@didavie.com"
     },
@@ -64,7 +64,7 @@
           "Agency"
         ],
         "summary": "Agency and credit balance (or shop for shop keys)",
-        "description": "Returns the agency bound to this API key. No scope required — every valid key can call this. With a shop key (`rb_live_…`) the data is a `ShopMe` object instead.",
+        "description": "Returns the agency bound to this API key. No scope required: every valid key can call this. With a shop key (`rb_live_…`) the data is a `ShopMe` object instead.",
         "responses": {
           "200": {
             "description": "OK",
@@ -1783,6 +1783,36 @@
               "default": "standard"
             },
             "description": "Shop keys only. Express is not available yet: 'express' is accepted and answered as standard with delivery_type_note."
+          },
+          {
+            "name": "pickup_at",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "description": "Agency keys, optional: requested pickup time (ISO 8601) of a scheduled delivery. The price is computed for this time (agency time rules and the Relay minimum's night pricing), not for the time of the request. Omitted: priced at the time of the request. Shop keys ignore it (a shop quote is for now)."
+          },
+          {
+            "name": "delivery_at",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "description": "Agency keys, optional: requested delivery time (ISO 8601). Used for the price when pickup_at is not sent."
+          },
+          {
+            "name": "requested_at",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "description": "Agency keys, optional: time to price at when neither pickup_at nor delivery_at is sent."
           }
         ],
         "responses": {
